@@ -4,7 +4,7 @@ import logging
 
 import discord
 from discord.ui import Button, View, Select
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 try:
     from cogs.pokemon_management_cog import PokemonActionsView as ManagementPokemonActionsView
@@ -1722,50 +1722,17 @@ class BoxPokemonActionsView(View):
             )
 
 class BattleMenuView(View):
-    """Battle menu with PvE and PvP options"""
+    """Battle menu with casual and ranked options"""
 
     def __init__(self, bot, location: dict):
         super().__init__(timeout=300)
         self.bot = bot
         self.location = location
-    
-    @discord.ui.button(label="⚔️ Battle Trainer (PvE)", style=discord.ButtonStyle.danger, row=0)
-    async def pve_button(self, interaction: discord.Interaction, button: Button):
-        """Battle NPC trainers"""
-        from ui.embeds import EmbedBuilder
-        
-        # Get NPCs at this location
-        npc_trainers = self.location.get('npc_trainers', [])
-        
-        if not npc_trainers:
-            await interaction.response.send_message(
-                f"⚔️ No trainers available at **{self.location.get('name', 'this location')}**!",
-                ephemeral=True
-            )
-            return
-        
-        # Show NPC selection
-        embed = EmbedBuilder.npc_trainer_list(npc_trainers, self.location)
-        view = NpcTrainerSelectView(self.bot, npc_trainers, self.location)
-        
-        await interaction.response.send_message(
-            embed=embed,
-            view=view,
-            ephemeral=True
-        )
-    
-    @discord.ui.button(label="🔥 Battle Player (PvP)", style=discord.ButtonStyle.primary, row=0)
-    async def pvp_button(self, interaction: discord.Interaction, button: Button):
-        """Battle other players"""
-        from ui.embeds import EmbedBuilder
 
+    def _get_available_players(self, interaction: discord.Interaction):
         trainer = self.bot.player_manager.get_player(interaction.user.id)
         if not trainer:
-            await interaction.response.send_message(
-                "❌ You need a trainer profile to battle other players!",
-                ephemeral=True
-            )
-            return
+            return None, None, None, [], "❌ You need a trainer profile before battling other players!"
 
         location_id = trainer.current_location_id
         location_name = self.bot.location_manager.get_location_name(location_id)
@@ -1778,13 +1745,24 @@ class BattleMenuView(View):
         battle_cog = self.bot.get_cog('BattleCog')
         busy_ids = set(battle_cog.user_battles.keys()) if battle_cog else set()
         available_trainers = [
-            trainer for trainer in available_trainers
-            if getattr(trainer, 'discord_user_id', None) not in busy_ids
+            other for other in available_trainers
+            if getattr(other, 'discord_user_id', None) not in busy_ids
         ]
 
+        return trainer, location_id, location_name, available_trainers, None
+
+    @discord.ui.button(label="🎮 Casual Battle", style=discord.ButtonStyle.primary, row=0)
+    async def casual_button(self, interaction: discord.Interaction, button: Button):
+        """Show casual PvP options"""
+        from ui.embeds import EmbedBuilder
+
+        _, location_id, location_name, available_trainers, error = self._get_available_players(interaction)
+        if error:
+            await interaction.response.send_message(error, ephemeral=True)
+            return
         if not available_trainers:
             await interaction.response.send_message(
-                "⚠️ No other trainers in this location are available for battle right now.",
+                "⚠️ No other trainers in this location are available for casual battles right now.",
                 ephemeral=True
             )
             return
@@ -1795,11 +1773,55 @@ class BattleMenuView(View):
             opponents=available_trainers,
             location_id=location_id,
             location_name=location_name,
-            guild=interaction.guild
+            guild=interaction.guild,
+            is_ranked=False
         )
 
-        embed = EmbedBuilder.pvp_challenge_menu(location_name, available_trainers)
+        embed = EmbedBuilder.pvp_challenge_menu(location_name, available_trainers, ranked=False)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    @discord.ui.button(label="🏆 Ranked Battle", style=discord.ButtonStyle.danger, row=0)
+    async def ranked_button(self, interaction: discord.Interaction, button: Button):
+        """Show ranked options (players + NPCs)"""
+        from ui.embeds import EmbedBuilder
+
+        _, location_id, location_name, available_trainers, error = self._get_available_players(interaction)
+        if error:
+            await interaction.response.send_message(error, ephemeral=True)
+            return
+
+        ranked_npcs = self.location.get('ranked_npc_trainers', []) if self.location else []
+
+        response_sent = False
+
+        if available_trainers:
+            player_view = PvPChallengeSetupView(
+                bot=self.bot,
+                challenger=interaction.user,
+                opponents=available_trainers,
+                location_id=location_id,
+                location_name=location_name,
+                guild=interaction.guild,
+                is_ranked=True
+            )
+            player_embed = EmbedBuilder.pvp_challenge_menu(location_name, available_trainers, ranked=True)
+            await interaction.response.send_message(embed=player_embed, view=player_view, ephemeral=True)
+            response_sent = True
+
+        if ranked_npcs:
+            npc_view = NpcTrainerSelectView(self.bot, ranked_npcs, self.location, ranked=True)
+            npc_embed = EmbedBuilder.npc_trainer_list(ranked_npcs, self.location, ranked=True)
+            if response_sent:
+                await interaction.followup.send(embed=npc_embed, view=npc_view, ephemeral=True)
+            else:
+                await interaction.response.send_message(embed=npc_embed, view=npc_view, ephemeral=True)
+                response_sent = True
+
+        if not response_sent:
+            await interaction.response.send_message(
+                "⚠️ No ranked challengers are available at this location right now.",
+                ephemeral=True
+            )
 
 
 class PvPChallengeSetupView(View):
@@ -1812,7 +1834,8 @@ class PvPChallengeSetupView(View):
         opponents: List,
         location_id: str,
         location_name: str,
-        guild: Optional[discord.Guild]
+        guild: Optional[discord.Guild],
+        is_ranked: bool = False
     ):
         super().__init__(timeout=300)
         self.bot = bot
@@ -1820,6 +1843,7 @@ class PvPChallengeSetupView(View):
         self.location_id = location_id
         self.location_name = location_name
         self.guild = guild
+        self.is_ranked = is_ranked
         self.visible_opponents = opponents[:25]
         self.selected_opponent_id: Optional[int] = None
         self.selected_format = BattleFormat.SINGLES if BattleFormat else None
@@ -1876,8 +1900,9 @@ class PvPChallengeSetupView(View):
         size_select.callback = self.size_callback
         self.add_item(size_select)
 
+        button_label = "Send Ranked Challenge" if self.is_ranked else "Send Challenge"
         send_button = Button(
-            label="Send Challenge",
+            label=button_label,
             style=discord.ButtonStyle.success,
             custom_id="pvp_send_challenge"
         )
@@ -2008,20 +2033,34 @@ class PvPChallengeSetupView(View):
         opponent_mention = opponent_member.mention if opponent_member else f"<@{self.selected_opponent_id}>"
         challenger_mention = self.challenger.mention
 
-        embed = discord.Embed(
-            title="⚔️ PvP Challenge",
-            description=(
+        if self.is_ranked:
+            title = "🏆 Ranked PvP Challenge"
+            color = discord.Color.gold()
+            description = (
+                f"{challenger_mention} has issued a ranked challenge to {opponent_mention}!\n"
+                f"Location: **{self.location_name}**"
+            )
+            footer_text = "Ranked victories grant Challenger points."
+        else:
+            title = "⚔️ PvP Challenge"
+            color = discord.Color.red()
+            description = (
                 f"{challenger_mention} has challenged {opponent_mention}!\n"
                 f"Location: **{self.location_name}**"
-            ),
-            color=discord.Color.red()
+            )
+            footer_text = "Only the challenged trainer can accept."
+
+        embed = discord.Embed(
+            title=title,
+            description=description,
+            color=color
         )
         embed.add_field(
             name="Format",
             value=f"{self._format_label()} — {team_size} Pokémon per trainer",
             inline=False
         )
-        embed.set_footer(text="Only the challenged trainer can accept.")
+        embed.set_footer(text=footer_text)
 
         response_view = PvPChallengeResponseView(
             bot=self.bot,
@@ -2032,7 +2071,8 @@ class PvPChallengeSetupView(View):
             location_id=self.location_id,
             location_name=self.location_name,
             challenger_name=getattr(challenger_trainer, 'trainer_name', self.challenger.display_name),
-            opponent_name=getattr(opponent_trainer, 'trainer_name', opponent_member.display_name if opponent_member else 'Trainer')
+            opponent_name=getattr(opponent_trainer, 'trainer_name', opponent_member.display_name if opponent_member else 'Trainer'),
+            is_ranked=self.is_ranked
         )
 
         message = await interaction.channel.send(
@@ -2059,7 +2099,8 @@ class PvPChallengeResponseView(View):
         location_id: str,
         location_name: str,
         challenger_name: str,
-        opponent_name: str
+        opponent_name: str,
+        is_ranked: bool = False
     ):
         super().__init__(timeout=120)
         self.bot = bot
@@ -2072,6 +2113,7 @@ class PvPChallengeResponseView(View):
         self.challenger_name = challenger_name
         self.opponent_name = opponent_name
         self.message: Optional[discord.Message] = None
+        self.is_ranked = is_ranked
 
     def _format_label(self) -> str:
         if not BattleFormat or not self.battle_format:
@@ -2137,6 +2179,13 @@ class PvPChallengeResponseView(View):
         if fmt is None:
             return "Battle format is unavailable."
 
+        ranked_context = None
+        if self.is_ranked:
+            ranked_context = {
+                'mode': 'pvp',
+                'players': [self.challenger_id, self.opponent_id]
+            }
+
         battle_id = battle_cog.battle_engine.start_pvp_battle(
             trainer1_id=self.challenger_id,
             trainer1_name=self.challenger_name,
@@ -2144,7 +2193,9 @@ class PvPChallengeResponseView(View):
             trainer2_id=self.opponent_id,
             trainer2_name=self.opponent_name,
             trainer2_party=opponent_party,
-            battle_format=fmt
+            battle_format=fmt,
+            is_ranked=self.is_ranked,
+            ranked_context=ranked_context
         )
 
         battle_cog.user_battles[self.challenger_id] = battle_id
@@ -2195,13 +2246,14 @@ class PvPChallengeResponseView(View):
 
 class NpcTrainerSelectView(View):
     """Select an NPC trainer to battle"""
-    
-    def __init__(self, bot, npc_trainers: list, location: dict):
+
+    def __init__(self, bot, npc_trainers: list, location: dict, ranked: bool = False):
         super().__init__(timeout=300)
         self.bot = bot
         self.npc_trainers = npc_trainers
         self.location = location
-        
+        self.ranked = ranked
+
         # Add NPC select dropdown
         options = []
         for i, npc in enumerate(npc_trainers[:25], 1):  # Discord max 25 options
@@ -2221,10 +2273,12 @@ class NpcTrainerSelectView(View):
                 )
             )
         
+        placeholder = "Choose a ranked trainer to battle..." if ranked else "Choose a trainer to battle..."
+        custom_id = "ranked_npc_select" if ranked else "npc_select"
         select = Select(
-            placeholder="Choose a trainer to battle...",
+            placeholder=placeholder,
             options=options,
-            custom_id="npc_select"
+            custom_id=custom_id
         )
         select.callback = self.npc_callback
         self.add_item(select)
@@ -2270,6 +2324,8 @@ class NpcTrainerSelectView(View):
             )
             return
         
+        ranked_context = self._build_ranked_context(npc_data)
+
         battle_id = battle_cog.battle_engine.start_trainer_battle(
             trainer_id=interaction.user.id,
             trainer_name=interaction.user.display_name,
@@ -2277,7 +2333,9 @@ class NpcTrainerSelectView(View):
             npc_party=npc_pokemon,
             npc_name=npc_data.get('name', 'Trainer'),
             npc_class=npc_data.get('class', 'Trainer'),
-            prize_money=npc_data.get('prize_money', 0)
+            prize_money=npc_data.get('prize_money', 0),
+            is_ranked=self.ranked,
+            ranked_context=ranked_context
         )
         
         # Register battle
@@ -2289,9 +2347,20 @@ class NpcTrainerSelectView(View):
             battle_id=battle_id,
             battle_type=BattleType.TRAINER
         )
-        
+
         self.stop()
-    
+
+    def _build_ranked_context(self, npc_data: dict) -> Optional[Dict[str, Any]]:
+        if not self.ranked:
+            return None
+        npc_rank = npc_data.get('rank_tier_number') or npc_data.get('rank') or 1
+        return {
+            'mode': 'npc',
+            'npc_rank': npc_rank,
+            'npc_name': npc_data.get('name'),
+            'npc_class': npc_data.get('class')
+        }
+
     def _create_npc_pokemon(self, npc_poke_data: dict):
         """Create a Pokemon object from NPC trainer data"""
         from models import Pokemon

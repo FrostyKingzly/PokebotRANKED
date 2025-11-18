@@ -91,6 +91,29 @@
           { "species_dex_number": 633, "level": 18 }
         ]
       }
+    ],
+    "ranked_npc_trainers": [
+      {
+        "name": "League Scout Avery",
+        "class": "League Scout",
+        "rank_tier_number": 1,
+        "prize_money": 4500,
+        "party": [
+          { "species_dex_number": 310, "level": 28, "moves": ["thunder_punch", "shock_wave", "quick_attack", "howl"] },
+          { "species_dex_number": 135, "level": 30, "moves": ["thunderbolt", "volt_switch", "shadow_ball", "wish"] }
+        ]
+      },
+      {
+        "name": "Circuit Ace Rina",
+        "class": "Ace Trainer",
+        "rank_tier_number": 2,
+        "prize_money": 7000,
+        "party": [
+          { "species_dex_number": 405, "level": 45, "moves": ["wild_charge", "iron_tail", "volt_switch", "quick_attack"] },
+          { "species_dex_number": 596, "level": 47, "moves": ["bug_buzz", "discharge", "sticky_web", "energy_ball"] },
+          { "species_dex_number": 448, "level": 48, "moves": ["close_combat", "meteor_mash", "bullet_punch", "nasty_plot"] }
+        ]
+      }
     ]
   },
   "lights_district_art_studio": {
@@ -173,6 +196,29 @@
               "focus_blast"
             ]
           }
+        ]
+      }
+    ],
+    "ranked_npc_trainers": [
+      {
+        "name": "Curator Selene",
+        "class": "League Curator",
+        "rank_tier_number": 1,
+        "prize_money": 5000,
+        "party": [
+          { "species_dex_number": 281, "level": 30, "moves": ["psyshock", "dazzling_gleam", "calm_mind", "teleport"] },
+          { "species_dex_number": 765, "level": 33, "moves": ["psychic", "focus_blast", "trick_room", "thunder_wave"] }
+        ]
+      },
+      {
+        "name": "Master Painter Jules",
+        "class": "League Proctor",
+        "rank_tier_number": 3,
+        "prize_money": 8500,
+        "party": [
+          { "species_dex_number": 700, "level": 48, "moves": ["moonblast", "calm_mind", "psychic", "draining_kiss"] },
+          { "species_dex_number": 282, "level": 50, "moves": ["psychic", "shadow_ball", "focus_blast", "calm_mind"] },
+          { "species_dex_number": 350, "level": 50, "moves": ["surf", "ice_beam", "recover", "toxic"] }
         ]
       }
     ]

@@ -820,34 +820,41 @@ class EmbedBuilder:
             description=f"Choose your battle type at **{location_name}**!",
             color=discord.Color.red()
         )
-        
-        # Show PvE options
-        npc_trainers = location.get('npc_trainers', [])
-        if npc_trainers:
-            embed.add_field(
-                name="⚔️ Trainer Battles (PvE)",
-                value=f"Battle against {len(npc_trainers)} trainer(s) at this location!",
-                inline=False
-            )
-        else:
-            embed.add_field(
-                name="⚔️ Trainer Battles (PvE)",
-                value="No trainers available at this location.",
-                inline=False
-            )
-        
-        # Show PvP option
+
+        # Casual battle summary
         if available_pvp is None:
-            pvp_status = "Challenge other players exploring this location."
+            casual_status = "Challenge other nearby trainers for a casual spar."
         elif available_pvp <= 0:
-            pvp_status = "No other trainers are here right now."
+            casual_status = "No other casual trainers are here right now."
         else:
             plural = "trainer" if available_pvp == 1 else "trainers"
-            pvp_status = f"Challenge {available_pvp} nearby {plural}!"
+            casual_status = f"Challenge {available_pvp} nearby {plural} for a casual battle!"
 
         embed.add_field(
-            name="🔥 Player Battles (PvP)",
-            value=pvp_status,
+            name="🎮 Casual Battles",
+            value=casual_status,
+            inline=False
+        )
+
+        # Ranked battle summary (players + NPCs)
+        ranked_npcs = location.get('ranked_npc_trainers', [])
+        npc_count = len(ranked_npcs)
+        if available_pvp is None:
+            ranked_player_text = "Take on local trainers for Challenger points."
+        elif available_pvp <= 0:
+            ranked_player_text = "No other players are currently eligible for ranked battles."
+        else:
+            plural = "trainer" if available_pvp == 1 else "trainers"
+            ranked_player_text = f"{available_pvp} player {plural} available for ranked battles."
+
+        if npc_count:
+            npc_text = f"{npc_count} League official(s) ready for ranked challenges."
+        else:
+            npc_text = "No ranked NPC challengers at this location."
+
+        embed.add_field(
+            name="🏆 Ranked Battles",
+            value=f"{ranked_player_text}\n{npc_text}\nEarn Challenger points when you win!",
             inline=False
         )
 
@@ -855,15 +862,27 @@ class EmbedBuilder:
         return embed
 
     @staticmethod
-    def pvp_challenge_menu(location_name: str, opponents: list) -> discord.Embed:
+    def pvp_challenge_menu(location_name: str, opponents: list, ranked: bool = False) -> discord.Embed:
         """Show available opponents for PvP battles."""
-        embed = discord.Embed(
-            title="🔥 Player Battles",
-            description=(
+        if ranked:
+            title = "🏆 Ranked Player Battles"
+            description = (
+                f"Challenge another trainer currently exploring **{location_name}** for ranked play.\n"
+                "Use the dropdown below to pick your opponent and customize the rules."
+            )
+            color = discord.Color.gold()
+        else:
+            title = "🔥 Player Battles"
+            description = (
                 f"Challenge another trainer currently exploring **{location_name}**.\n"
                 "Use the dropdown below to pick your opponent and customize the rules."
-            ),
-            color=discord.Color.orange()
+            )
+            color = discord.Color.orange()
+
+        embed = discord.Embed(
+            title=title,
+            description=description,
+            color=color
         )
 
         if opponents:
@@ -885,19 +904,29 @@ class EmbedBuilder:
                 inline=False
             )
 
-        embed.set_footer(text="Pick a trainer, then choose singles or doubles and the team size!")
+        footer = "Ranked wins grant Challenger points!" if ranked else "Pick a trainer, then choose singles or doubles and the team size!"
+        embed.set_footer(text=footer)
         return embed
-    
+
     @staticmethod
-    def npc_trainer_list(npc_trainers: list, location: dict) -> discord.Embed:
+    def npc_trainer_list(npc_trainers: list, location: dict, ranked: bool = False) -> discord.Embed:
         """Create NPC trainer selection embed"""
         location_name = location.get('name', 'Unknown Location')
+        if ranked:
+            title = f"🏆 Ranked Officials at {location_name}"
+            description = "Select a League-sanctioned opponent for a ranked match."
+            color = discord.Color.gold()
+        else:
+            title = f"⚔️ Trainers at {location_name}"
+            description = "Choose a trainer to battle!"
+            color = discord.Color.orange()
+
         embed = discord.Embed(
-            title=f"⚔️ Trainers at {location_name}",
-            description="Choose a trainer to battle!",
-            color=discord.Color.orange()
+            title=title,
+            description=description,
+            color=color
         )
-        
+
         # List trainers
         for i, npc in enumerate(npc_trainers, 1):
             npc_name = npc.get('name', 'Unknown Trainer')
