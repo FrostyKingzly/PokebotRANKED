@@ -113,6 +113,10 @@ class BattleState:
     catch_attempted: bool = False
     wild_dazed: bool = False  # True when wild Pokémon has been reduced to a 'dazed' state instead of fainting
 
+    # Ranked metadata
+    is_ranked: bool = False
+    ranked_context: Dict[str, Any] = field(default_factory=dict)
+
 
 class HeldItemManager:
     """Utility helper for held item effects."""
@@ -368,6 +372,8 @@ class BattleEngine:
         opponent_id: Optional[int] = None,
         opponent_name: Optional[str] = None,
         opponent_is_ai: bool = True,
+        is_ranked: bool = False,
+        ranked_context: Optional[Dict[str, Any]] = None,
         **kwargs
     ) -> str:
         """Universal battle starter"""
@@ -421,7 +427,9 @@ class BattleEngine:
             battle_type=battle_type,
             battle_format=battle_format,
             trainer=trainer,
-            opponent=opponent
+            opponent=opponent,
+            is_ranked=is_ranked,
+            ranked_context=ranked_context or {}
         )
         
         # Trigger entry abilities
@@ -454,9 +462,18 @@ class BattleEngine:
             opponent_name=f"Wild {wild_pokemon.species_name}"
         )
     
-    def start_trainer_battle(self, trainer_id: int, trainer_name: str,
-                           trainer_party: List[Any], npc_party: List[Any],
-                           npc_name: str, npc_class: str, prize_money: int) -> str:
+    def start_trainer_battle(
+        self,
+        trainer_id: int,
+        trainer_name: str,
+        trainer_party: List[Any],
+        npc_party: List[Any],
+        npc_name: str,
+        npc_class: str,
+        prize_money: int,
+        is_ranked: bool = False,
+        ranked_context: Optional[Dict[str, Any]] = None
+    ) -> str:
         """Convenience method for NPC trainer battles"""
         return self.start_battle(
             trainer_id=trainer_id,
@@ -466,12 +483,23 @@ class BattleEngine:
             battle_type=BattleType.TRAINER,
             opponent_name=npc_name,
             trainer_class=npc_class,
-            prize_money=prize_money
+            prize_money=prize_money,
+            is_ranked=is_ranked,
+            ranked_context=ranked_context
         )
     
-    def start_pvp_battle(self, trainer1_id: int, trainer1_name: str, trainer1_party: List[Any],
-                        trainer2_id: int, trainer2_name: str, trainer2_party: List[Any],
-                        battle_format: BattleFormat = BattleFormat.SINGLES) -> str:
+    def start_pvp_battle(
+        self,
+        trainer1_id: int,
+        trainer1_name: str,
+        trainer1_party: List[Any],
+        trainer2_id: int,
+        trainer2_name: str,
+        trainer2_party: List[Any],
+        battle_format: BattleFormat = BattleFormat.SINGLES,
+        is_ranked: bool = False,
+        ranked_context: Optional[Dict[str, Any]] = None
+    ) -> str:
         """Convenience method for PvP battles"""
         return self.start_battle(
             trainer_id=trainer1_id,
@@ -482,7 +510,9 @@ class BattleEngine:
             opponent_id=trainer2_id,
             opponent_name=trainer2_name,
             opponent_is_ai=False,
-            battle_format=battle_format
+            battle_format=battle_format,
+            is_ranked=is_ranked,
+            ranked_context=ranked_context
         )
     
     # ========================
